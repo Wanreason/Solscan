@@ -7,26 +7,22 @@ from cleanup import cleanup_db
 from utils import get_trending_memecoins, filter_scams
 from settings import save_setting
 
-# Load Telegram token and initialize app
+# Load tokens
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # e.g. https://your-render-url.onrender.com
 
-# Setup Telegram application
-application = Application.builder().token(TOKEN).build()
-
-# Initialize TinyDB
-db = TinyDB('settings.json')
-UserSettings = Query()
-
-# Run DB cleanup
-cleanup_db(db)
-
-# Flask server
+# Flask app
 flask_app = Flask(__name__)
 
-# ===========================
-# Command Handlers
-# ===========================
+# Telegram app
+application = Application.builder().token(TOKEN).build()
+
+# Initialize TinyDB and cleanup
+db = TinyDB('settings.json')
+UserSettings = Query()
+cleanup_db(db)
+
+# Command Handlers (same as before)
 
 async def settings_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
@@ -73,40 +69,29 @@ async def set_api(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("❌ Invalid choice! Available APIs: `openocean`, `bitquery`, `mcp`")
 
-# ===========================
-# Register Commands
-# ===========================
-
+# Register handlers
 application.add_handler(CommandHandler("settings", settings_menu))
 application.add_handler(CommandHandler("set_frequency", set_frequency))
 application.add_handler(CommandHandler("set_price", set_price))
 application.add_handler(CommandHandler("set_api", set_api))
 application.add_handler(CommandHandler("alerts", send_alert))
 
-# ===========================
-# Flask Webhook Route
-# ===========================
-
+# Webhook route for Telegram
 @flask_app.route(f"/{TOKEN}", methods=["POST"])
 def webhook() -> str:
     update = Update.de_json(request.get_json(force=True), application.bot)
     application.update_queue.put(update)
     return "OK"
 
+# Health check route
 @flask_app.route("/", methods=["GET"])
 def home():
     return "🚀 Telegram bot is live!"
 
-# ===========================
-# Run App and Set Webhook
-# ===========================
-
 if __name__ == "__main__":
     import asyncio
-    async def run():
-        await application.bot.set_webhook(url=f"{WEBHOOK_URL}/{TOKEN}")
-        print(f"✅ Webhook set: {WEBHOOK_URL}/{TOKEN}")
-        application.run_polling()  # Optional fallback
-
-    asyncio.run(run())
-    flask_app.run(host="0.0.0.0", port=10000)
+    # Set webhook (run once)
+    asyncio.run(application.bot.set_webhook(url=f"{WEBHOOK_URL}/{TOKEN}"))
+    print(f"✅ Webhook set: {WEBHOOK_URL}/{TOKEN}")
+    # Run Flask server — Render will use this to receive webhook requests
+    flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
