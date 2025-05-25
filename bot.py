@@ -142,8 +142,8 @@ def home():
 if __name__ == "__main__":
     import asyncio
 
-    async def startup(): 
-    try:
+    async def startup():
+        try:
             full_url = f"{WEBHOOK_URL}/{TOKEN}"
             await application.bot.set_webhook(url=full_url)
             webhook_info = await application.bot.get_webhook_info()
@@ -153,7 +153,6 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"❌ Failed to set webhook: {e}")
 
-        # Start Flask after webhook setup
         flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
 
     asyncio.run(startup())
