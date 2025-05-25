@@ -66,7 +66,7 @@ async def set_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Invalid input! Usage: `/set_price <amount>`")
 
 async def set_api(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if context.args and context.args[0] in ["openocean", "bitquery", "mcp"]:
+    if context.args[0] in ["openocean", "bitquery", "mcp"]:
         user_id = update.message.chat_id
         save_setting(user_id, "api_priority", context.args[0])
         await update.message.reply_text(f"✅ API switched to {context.args[0].capitalize()}.")
@@ -98,19 +98,15 @@ def home():
     return "🚀 Telegram bot is live!"
 
 # ===========================
-# Set webhook before first request (Flask)
-# ===========================
-
-@flask_app.before_first_request
-def set_webhook():
-    import asyncio
-    asyncio.run(application.bot.set_webhook(url=f"{WEBHOOK_URL}/{TOKEN}"))
-    print(f"✅ Webhook set to {WEBHOOK_URL}/{TOKEN}")
-
-# ===========================
-# Run Flask app
+# Run App and Set Webhook
 # ===========================
 
 if __name__ == "__main__":
-    # Running flask_app directly. Gunicorn will use this file's 'flask_app'
+    import asyncio
+    async def run():
+        await application.bot.set_webhook(url=f"{WEBHOOK_URL}/{TOKEN}")
+        print(f"✅ Webhook set: {WEBHOOK_URL}/{TOKEN}")
+        application.run_polling()  # Optional fallback
+
+    asyncio.run(run())
     flask_app.run(host="0.0.0.0", port=10000)
