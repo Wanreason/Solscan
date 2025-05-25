@@ -1,5 +1,5 @@
 python-telegram-bot
 requests
-Flask==2.3.
+Flask==2.3.3
 python-dotenv
 tinydb
