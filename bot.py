@@ -1,31 +1,34 @@
 import os
 from flask import Flask, request
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, Bot
 from telegram.ext import Application, CommandHandler, ContextTypes
 from tinydb import TinyDB, Query
 from cleanup import cleanup_db
 from utils import get_trending_memecoins, filter_scams
 from settings import save_setting
+from dotenv import load_dotenv
 
-# Load Telegram token and initialize app
+# Load environment variables
+load_dotenv()
+
 TOKEN = os.getenv("TELEGRAM_TOKEN")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # e.g. https://your-render-url.onrender.com
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # e.g. https://your-bot.onrender.com
 
-# Setup Telegram application
+bot = Bot(token=TOKEN)
 application = Application.builder().token(TOKEN).build()
 
-# Initialize TinyDB
+# TinyDB for storing settings
 db = TinyDB('settings.json')
 UserSettings = Query()
 
-# Run DB cleanup
+# Clean old DB entries
 cleanup_db(db)
 
-# Flask server
-flask_app = Flask(__name__)
+# Flask app instance — this MUST be named 'app' for Gunicorn
+app = Flask(__name__)
 
 # ===========================
-# Command Handlers
+# Telegram Command Handlers
 # ===========================
 
 async def settings_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -74,7 +77,7 @@ async def set_api(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Invalid choice! Available APIs: `openocean`, `bitquery`, `mcp`")
 
 # ===========================
-# Register Commands
+# Register Telegram Commands
 # ===========================
 
 application.add_handler(CommandHandler("settings", settings_menu))
@@ -84,29 +87,26 @@ application.add_handler(CommandHandler("set_api", set_api))
 application.add_handler(CommandHandler("alerts", send_alert))
 
 # ===========================
-# Flask Webhook Route
+# Webhook Setup for Render
 # ===========================
 
-@flask_app.route(f"/{TOKEN}", methods=["POST"])
-def webhook() -> str:
-    update = Update.de_json(request.get_json(force=True), application.bot)
-    application.update_queue.put(update)
-    return "OK"
+@app.before_first_request
+def setup_webhook():
+    full_url = f"{WEBHOOK_URL}/{TOKEN}"
+    try:
+        bot.set_webhook(full_url)
+        print(f"✅ Webhook set to {full_url}")
+    except Exception as e:
+        print(f"❌ Failed to set webhook: {e}")
 
-@flask_app.route("/", methods=["GET"])
+@app.route(f"/{TOKEN}", methods=["POST"])
+def telegram_webhook():
+    update = Update.de_json(request.get_json(force=True), bot)
+    application.update_queue.put_nowait(update)
+    return "OK", 200
+
+@app.route("/", methods=["GET"])
 def home():
-    return "🚀 Telegram bot is live!"
+    return "🚀 Telegram bot is live!", 200
 
-# ===========================
-# Run App and Set Webhook
-# ===========================
-
-if __name__ == "__main__":
-    import asyncio
-    async def run():
-        await application.bot.set_webhook(url=f"{WEBHOOK_URL}/{TOKEN}")
-        print(f"✅ Webhook set: {WEBHOOK_URL}/{TOKEN}")
-        application.run_polling()  # Optional fallback
-
-    asyncio.run(run())
-    flask_app.run(host="0.0.0.0", port=10000)
+# ✅ The app variable is now correctly exported for Gunicorn
