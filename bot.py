@@ -6,6 +6,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from tinydb import TinyDB, Query
 from cleanup import cleanup_db
 from utils import get_trending_memecoins, filter_scams
+from settings import save_setting, get_setting
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 
@@ -13,16 +14,7 @@ TOKEN = os.getenv("TELEGRAM_TOKEN")
 db = TinyDB('settings.json')
 UserSettings = Query()
 
-# Function to save user settings
-def save_setting(user_id, key, value):
-    db.upsert({'user_id': user_id, key: value, 'timestamp': os.time()}, UserSettings.user_id == user_id)
-
-# Function to retrieve user settings
-def get_setting(user_id, key, default=None):
-    result = db.get(UserSettings.user_id == user_id)
-    return result[key] if result and key in result else default
-
-# Settings Menu Function
+# Function to retrieve and update settings
 async def settings_menu(update, context):
     keyboard = [
         [InlineKeyboardButton("🔔 Set Alert Frequency", callback_data="set_frequency")],
@@ -45,6 +37,35 @@ async def send_alert(update, context):
         await update.message.reply_text(f"🔥 Trending Memecoins:\n{message}")
     except Exception as e:
         await update.message.reply_text(f"❌ Error fetching memecoins: {str(e)}")
+
+# Set alert frequency
+async def set_frequency(update, context):
+    try:
+        frequency = int(context.args[0])
+        user_id = update.message.chat_id
+        save_setting(user_id, "alert_frequency", frequency)
+        await update.message.reply_text(f"✅ Alerts set every {frequency} minutes.")
+    except:
+        await update.message.reply_text("❌ Invalid input! Usage: `/set_frequency <minutes>`")
+
+# Set price filter
+async def set_price(update, context):
+    try:
+        price = float(context.args[0])
+        user_id = update.message.chat_id
+        save_setting(user_id, "price_filter", price)
+        await update.message.reply_text(f"✅ Memecoins filtered above ${price}.")
+    except:
+        await update.message.reply_text("❌ Invalid input! Usage: `/set_price <amount>`")
+
+# Select API preference
+async def set_api(update, context):
+    if context.args[0] in ["openocean", "bitquery", "mcp"]:
+        user_id = update.message.chat_id
+        save_setting(user_id, "api_priority", context.args[0])
+        await update.message.reply_text(f"✅ API switched to {context.args[0].capitalize()}.")
+    else:
+        await update.message.reply_text("❌ Invalid choice! Available APIs: `openocean`, `bitquery`, `mcp`")
 
 # Bot Command Handlers
 application = Application.builder().token(TOKEN).build()
