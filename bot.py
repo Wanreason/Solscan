@@ -1,21 +1,29 @@
 import os
-import requests
-import telegram
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from flask import Flask, request
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import Application, CommandHandler, ContextTypes
 from tinydb import TinyDB, Query
 from cleanup import cleanup_db
 from utils import get_trending_memecoins, filter_scams
 from settings import save_setting, get_setting
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # e.g., https://your-bot-name.onrender.com
 
-# Initialize TinyDB
+# Initialize Flask app and TinyDB
+app = Flask(__name__)
 db = TinyDB('settings.json')
 UserSettings = Query()
 
-# Function to retrieve and update settings
-async def settings_menu(update, context):
+# Cleanup old DB entries on startup
+cleanup_db(db)
+
+# Create Telegram Application
+application = Application.builder().token(TOKEN).build()
+
+# ----- Command Handlers -----
+
+async def settings_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("🔔 Set Alert Frequency", callback_data="set_frequency")],
         [InlineKeyboardButton("📈 Set Price Filter", callback_data="set_price_filter")],
@@ -25,11 +33,7 @@ async def settings_menu(update, context):
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text("⚙️ Configure Your Alerts:", reply_markup=reply_markup)
 
-# Cleanup database periodically
-cleanup_db(db)
-
-# Telegram command to send alerts
-async def send_alert(update, context):
+async def send_alert(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         memecoins = get_trending_memecoins()
         safe_coins = filter_scams(memecoins)
@@ -38,8 +42,7 @@ async def send_alert(update, context):
     except Exception as e:
         await update.message.reply_text(f"❌ Error fetching memecoins: {str(e)}")
 
-# Set alert frequency
-async def set_frequency(update, context):
+async def set_frequency(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         frequency = int(context.args[0])
         user_id = update.message.chat_id
@@ -48,8 +51,7 @@ async def set_frequency(update, context):
     except:
         await update.message.reply_text("❌ Invalid input! Usage: `/set_frequency <minutes>`")
 
-# Set price filter
-async def set_price(update, context):
+async def set_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         price = float(context.args[0])
         user_id = update.message.chat_id
@@ -58,21 +60,37 @@ async def set_price(update, context):
     except:
         await update.message.reply_text("❌ Invalid input! Usage: `/set_price <amount>`")
 
-# Select API preference
-async def set_api(update, context):
-    if context.args[0] in ["openocean", "bitquery", "mcp"]:
-        user_id = update.message.chat_id
-        save_setting(user_id, "api_priority", context.args[0])
-        await update.message.reply_text(f"✅ API switched to {context.args[0].capitalize()}.")
-    else:
-        await update.message.reply_text("❌ Invalid choice! Available APIs: `openocean`, `bitquery`, `mcp`")
+async def set_api(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        api = context.args[0]
+        if api in ["openocean", "bitquery", "mcp"]:
+            user_id = update.message.chat_id
+            save_setting(user_id, "api_priority", api)
+            await update.message.reply_text(f"✅ API switched to {api.capitalize()}.")
+        else:
+            await update.message.reply_text("❌ Invalid choice! Options: openocean, bitquery, mcp")
+    except:
+        await update.message.reply_text("❌ Usage: `/set_api <api>`")
 
-# Bot Command Handlers
-application = Application.builder().token(TOKEN).build()
+# ----- Register Handlers -----
 application.add_handler(CommandHandler("settings", settings_menu))
 application.add_handler(CommandHandler("set_frequency", set_frequency))
 application.add_handler(CommandHandler("set_price", set_price))
 application.add_handler(CommandHandler("set_api", set_api))
 application.add_handler(CommandHandler("alerts", send_alert))
 
-application.run_polling()
+# ----- Webhook Route for Telegram -----
+@app.route(f"/{TOKEN}", methods=["POST"])
+def webhook():
+    update = Update.de_json(request.get_json(force=True), application.bot)
+    application.update_queue.put_nowait(update)
+    return "ok", 200
+
+# ----- Start Webhook Server -----
+if __name__ == "__main__":
+    import asyncio
+    async def run():
+        await application.bot.set_webhook(f"{WEBHOOK_URL}/{TOKEN}")
+        print("✅ Webhook set:", f"{WEBHOOK_URL}/{TOKEN}")
+    asyncio.run(run())
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
