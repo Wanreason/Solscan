@@ -1,28 +1,31 @@
 import os
 import requests
-import telegram
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler
+from flask import Flask, request
+from telegram import Update
+from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.ext import Dispatcher
+from telegram.ext import CallbackContext
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from tinydb import TinyDB, Query
-from flask import Flask, request
 from cleanup import cleanup_db
 from utils import get_trending_memecoins, filter_scams
 from settings import save_setting, get_setting
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
-
-# Flask app for webhook endpoint
-app = Flask(__name__)
+PORT = int(os.environ.get("PORT", 10000))
+BASE_URL = os.getenv("RENDER_EXTERNAL_URL", "https://your-app-name.onrender.com")
 
 # Initialize TinyDB
 db = TinyDB('settings.json')
 UserSettings = Query()
 
-# Telegram bot setup
+app = Flask(__name__)
+
+# Telegram Application setup
 application = Application.builder().token(TOKEN).build()
 
-# Settings Menu
-async def settings_menu(update, context):
+# Function to retrieve and update settings menu
+async def settings_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("🔔 Set Alert Frequency", callback_data="set_frequency")],
         [InlineKeyboardButton("📈 Set Price Filter", callback_data="set_price_filter")],
@@ -32,11 +35,7 @@ async def settings_menu(update, context):
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text("⚙️ Configure Your Alerts:", reply_markup=reply_markup)
 
-# Cleanup database periodically
-cleanup_db(db)
-
-# Command: Show safe trending memecoins
-async def send_alert(update, context):
+async def send_alert(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         memecoins = get_trending_memecoins()
         safe_coins = filter_scams(memecoins)
@@ -45,8 +44,7 @@ async def send_alert(update, context):
     except Exception as e:
         await update.message.reply_text(f"❌ Error fetching memecoins: {str(e)}")
 
-# Command: Set alert frequency
-async def set_frequency(update, context):
+async def set_frequency(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         frequency = int(context.args[0])
         user_id = update.message.chat_id
@@ -55,8 +53,7 @@ async def set_frequency(update, context):
     except:
         await update.message.reply_text("❌ Invalid input! Usage: `/set_frequency <minutes>`")
 
-# Command: Set price filter
-async def set_price(update, context):
+async def set_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         price = float(context.args[0])
         user_id = update.message.chat_id
@@ -65,40 +62,42 @@ async def set_price(update, context):
     except:
         await update.message.reply_text("❌ Invalid input! Usage: `/set_price <amount>`")
 
-# Command: Choose API
-async def set_api(update, context):
-    if context.args[0] in ["openocean", "bitquery", "mcp"]:
+async def set_api(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if context.args and context.args[0] in ["openocean", "bitquery", "mcp"]:
         user_id = update.message.chat_id
         save_setting(user_id, "api_priority", context.args[0])
         await update.message.reply_text(f"✅ API switched to {context.args[0].capitalize()}.")
     else:
         await update.message.reply_text("❌ Invalid choice! Available APIs: `openocean`, `bitquery`, `mcp`")
 
-# Add command handlers
+# Add handlers
 application.add_handler(CommandHandler("settings", settings_menu))
 application.add_handler(CommandHandler("set_frequency", set_frequency))
 application.add_handler(CommandHandler("set_price", set_price))
 application.add_handler(CommandHandler("set_api", set_api))
 application.add_handler(CommandHandler("alerts", send_alert))
 
-# Webhook route for Telegram
-@app.route(f"/{TOKEN}", methods=["POST"])
-def webhook():
-    update = telegram.Update.de_json(request.get_json(force=True), application.bot)
-    application.update_queue.put_nowait(update)
-    return "OK", 200
+# Cleanup database once at startup
+cleanup_db(db)
 
-# Set webhook once when app starts
-@app.before_first_request
-def init_webhook():
-    base_url = os.getenv("RENDER_EXTERNAL_URL", "https://solscan-4y5w.onrender.com")
-    webhook_url = f"{base_url}/{TOKEN}"
+# Setup webhook function (called once at startup)
+def set_webhook():
+    webhook_url = f"{BASE_URL}/{TOKEN}"
     try:
         application.bot.set_webhook(url=webhook_url)
         print(f"✅ Webhook set: {webhook_url}")
     except Exception as e:
         print(f"❌ Failed to set webhook: {e}")
 
-# Run the Flask app if run directly (not required with gunicorn, but safe fallback)
+set_webhook()
+
+# Flask route for Telegram webhook updates
+@app.route(f"/{TOKEN}", methods=["POST"])
+def webhook_handler():
+    update = Update.de_json(request.get_json(force=True), application.bot)
+    application.update_queue.put(update)
+    return "OK"
+
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+    # Run Flask app with specified port
+    app.run(host="0.0.0.0", port=PORT)
