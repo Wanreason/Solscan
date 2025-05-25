@@ -142,12 +142,18 @@ def home():
 if __name__ == "__main__":
     import asyncio
 
-    async def startup():
-        await application.bot.set_webhook(url=f"{WEBHOOK_URL}/{TOKEN}")
-        webhook_info = await application.bot.get_webhook_info()
-        print(f"✅ Webhook set to: {webhook_info.url}")
-        if webhook_info.last_error_date:
-            print(f"⚠️ Last webhook error: {webhook_info.last_error_message}")
+    async def startup(): 
+    try:
+            full_url = f"{WEBHOOK_URL}/{TOKEN}"
+            await application.bot.set_webhook(url=full_url)
+            webhook_info = await application.bot.get_webhook_info()
+            print(f"✅ Webhook set to: {webhook_info.url}")
+            if webhook_info.last_error_date:
+                print(f"⚠️ Last webhook error: {webhook_info.last_error_message}")
+        except Exception as e:
+            print(f"❌ Failed to set webhook: {e}")
+
+        # Start Flask after webhook setup
         flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
 
     asyncio.run(startup())
