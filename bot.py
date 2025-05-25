@@ -8,7 +8,7 @@ from utils import get_trending_memecoins, filter_scams
 from settings import save_setting
 
 # Load tokens
-TOKEN = os.getenv("TELEGRAM_TOKEN")
+TOKEN = os.getenv("BOT_TOKEN")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # e.g. https://your-bot-name.onrender.com
 
 # Flask app
