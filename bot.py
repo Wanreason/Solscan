@@ -96,13 +96,11 @@ async def set_api(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("❌ Invalid choice! Available APIs: `openocean`, `bitquery`, `mcp`")
 
-# Optional: Button handler
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     await query.edit_message_text(f"You selected: {query.data} (Coming soon!)")
 
-# Fallback for unknown text
 async def fallback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print("❓ Received unknown message or command")
     await update.message.reply_text("🤖 I received your message, but didn't understand it.")
@@ -117,7 +115,7 @@ application.add_handler(CommandHandler("set_frequency", set_frequency))
 application.add_handler(CommandHandler("set_price", set_price))
 application.add_handler(CommandHandler("set_api", set_api))
 application.add_handler(CallbackQueryHandler(button_handler))
-application.add_handler(MessageHandler(filters.ALL, fallback))  # catch-all
+application.add_handler(MessageHandler(filters.ALL, fallback))
 
 # ========== FLASK ROUTES ==========
 
@@ -144,6 +142,11 @@ if __name__ == "__main__":
 
     async def startup():
         try:
+            # Initialize and start the bot
+            await application.initialize()
+            await application.start()
+
+            # Set webhook
             full_url = f"{WEBHOOK_URL}/{TOKEN}"
             await application.bot.set_webhook(url=full_url)
             webhook_info = await application.bot.get_webhook_info()
@@ -151,8 +154,9 @@ if __name__ == "__main__":
             if webhook_info.last_error_date:
                 print(f"⚠️ Last webhook error: {webhook_info.last_error_message}")
         except Exception as e:
-            print(f"❌ Failed to set webhook: {e}")
+            print(f"❌ Failed to start bot or set webhook: {e}")
 
+        # Start Flask server
         flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
 
     asyncio.run(startup())
