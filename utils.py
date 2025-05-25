@@ -1,5 +1,4 @@
 import requests
-import time
 
 API_ENDPOINTS = {
     "openocean": "https://apis.openocean.finance/developer/apis/meme-api",
@@ -15,10 +14,6 @@ def get_trending_memecoins():
             response.raise_for_status()  # Raise error for bad responses (e.g., 404, 500)
             data = response.json()
             memecoins.extend(data.get("tokens", []))  # Adjust based on API response format
-        except requests.exceptions.Timeout:
-            print(f"⚠️ Timeout error for {name}, retrying...")
-            time.sleep(2)  # Wait before retrying
-            continue
         except requests.exceptions.RequestException as e:
             print(f"❌ API error for {name}: {e}")
             continue
