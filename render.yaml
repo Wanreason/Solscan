@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: telegram-memecoin-bot
+    runtime: python
+    repo: https://github.com/YOUR_USERNAME/YOUR_REPO_NAME
+    branch: main  # or "master", depending on your default branch
+    buildCommand: pip install -r requirements.txt
+    startCommand: python bot.py
+    envVars:
+      - key: TELEGRAM_TOKEN
+        sync: false  # Set this in Render Dashboard manually for security
+      - key: WEBHOOK_URL
+        sync: false  # Example: https://telegram-memecoin-bot.onrender.com
+    plan: free
+    autoDeploy: true
