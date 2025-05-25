@@ -1,4 +1,5 @@
 import os
+import requests
 from flask import Flask, request
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, MessageHandler, filters
@@ -9,7 +10,7 @@ from settings import save_setting
 
 # Load tokens
 TOKEN = os.getenv("BOT_TOKEN")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # e.g. https://your-bot-name.onrender.com
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # e.g. https://your-bot-name.onrailway.app
 
 # Flask app
 flask_app = Flask(__name__)
@@ -55,75 +56,12 @@ async def send_alert(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"❌ Error fetching memecoins: {str(e)}")
 
-async def hot(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print("🔥 Received /hot command")
-    try:
-        memecoins = get_trending_memecoins()
-        safe_coins = filter_scams(memecoins)
-        message = "\n".join([f"{coin['name']} - ${coin['price']}" for coin in safe_coins])
-        if not message:
-            message = "No hot memecoins found right now."
-        await update.message.reply_text(f"🔥 Hot & Trending Memecoins:\n{message}")
-    except Exception as e:
-        await update.message.reply_text(f"❌ Error fetching hot memecoins: {str(e)}")
-
-async def set_frequency(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print("⏱️ Received /set_frequency command")
-    try:
-        frequency = int(context.args[0])
-        user_id = update.message.chat_id
-        save_setting(user_id, "alert_frequency", frequency)
-        await update.message.reply_text(f"✅ Alerts set every {frequency} minutes.")
-    except:
-        await update.message.reply_text("❌ Invalid input! Usage: `/set_frequency <minutes>`")
-
-async def set_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print("💰 Received /set_price command")
-    try:
-        price = float(context.args[0])
-        user_id = update.message.chat_id
-        save_setting(user_id, "price_filter", price)
-        await update.message.reply_text(f"✅ Memecoins filtered above ${price}.")
-    except:
-        await update.message.reply_text("❌ Invalid input! Usage: `/set_price <amount>`")
-
-async def set_api(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print("🌐 Received /set_api command")
-    if context.args[0] in ["openocean", "bitquery", "mcp"]:
-        user_id = update.message.chat_id
-        save_setting(user_id, "api_priority", context.args[0])
-        await update.message.reply_text(f"✅ API switched to {context.args[0].capitalize()}.")
-    else:
-        await update.message.reply_text("❌ Invalid choice! Available APIs: `openocean`, `bitquery`, `mcp`")
-
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    await query.edit_message_text(f"You selected: {query.data} (Coming soon!)")
-
-async def fallback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print("❓ Received unknown message or command")
-    await update.message.reply_text("🤖 I received your message, but didn't understand it.")
-
-# ========== REGISTER HANDLERS ==========
-
-application.add_handler(CommandHandler("start", start))
-application.add_handler(CommandHandler("settings", settings_menu))
-application.add_handler(CommandHandler("alerts", send_alert))
-application.add_handler(CommandHandler("hot", hot))
-application.add_handler(CommandHandler("set_frequency", set_frequency))
-application.add_handler(CommandHandler("set_price", set_price))
-application.add_handler(CommandHandler("set_api", set_api))
-application.add_handler(CallbackQueryHandler(button_handler))
-application.add_handler(MessageHandler(filters.ALL, fallback))
-
 # ========== FLASK ROUTES ==========
 
 @flask_app.route(f"/{TOKEN}", methods=["POST"])
 def webhook() -> str:
     try:
         data = request.get_json(force=True)
-        print(f"📨 Incoming Telegram update: {data}")
         update = Update.de_json(data, application.bot)
         application.update_queue.put(update)
         return "OK"
@@ -142,17 +80,14 @@ if __name__ == "__main__":
 
     async def startup():
         try:
-            # Initialize and start the bot
+            # Initialize bot
             await application.initialize()
             await application.start()
 
             # Set webhook
             full_url = f"{WEBHOOK_URL}/{TOKEN}"
             await application.bot.set_webhook(url=full_url)
-            webhook_info = await application.bot.get_webhook_info()
-            print(f"✅ Webhook set to: {webhook_info.url}")
-            if webhook_info.last_error_date:
-                print(f"⚠️ Last webhook error: {webhook_info.last_error_message}")
+            print(f"✅ Webhook set to: {full_url}")
         except Exception as e:
             print(f"❌ Failed to start bot or set webhook: {e}")
 
